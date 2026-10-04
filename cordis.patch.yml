@@ -1,0 +1,14 @@
+# dsh-plugin-update-checker bundle patch.
+#
+# `name` MUST equal package.json's `name` exactly, case included: the
+# dsh-client-modules Loader row resolver walks up from the resolved module path
+# to the package.json whose `name` strictly equals this specifier, then requires
+# the browser bundle to register that same id via __ModuleLoader__.load. A case
+# mismatch silently drops the whole browser half out of the boot graph while the
+# host half (the web route) keeps working.
+#
+# Applied after dsh-web-app; the user's own cordis.patch.yml can still override
+# the row by id.
+- insert:
+    - id: plugin-update-checker
+      name: dsh-plugin-update-checker
