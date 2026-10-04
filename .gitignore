@@ -1,0 +1,9 @@
+# Dependencies — only symlinks into the profile; never commit
+node_modules/
+
+# Local working artifacts
+.DS_Store
+
+# Test/coverage output
+coverage/
+*.log
