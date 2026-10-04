@@ -26,57 +26,72 @@ The check is on demand: click the button, the host scans, and the table fills in
 
 ## 📦 Install
 
-This plugin mounts like any other DSH local-link bundle.
+### Option A — from this GitHub repository (recommended)
 
-### 1. Put the package where your profile can link it
+1. Open the sidebar **Plugins** page → **Add plugin**.
+2. In the source field, enter one of these install specs (the launcher resolves them through `installBundle`, the same primitive the GUI uses):
 
-```bash
-# e.g. inside your DSH workspace
-git clone <this-repo> dsh-plugin-update-checker
-```
+   ```text
+   github:windrover/dsh-plugin-update-checker
+   # or the full URL:
+   https://github.com/windrover/dsh-plugin-update-checker
+   ```
 
-### 2. Link it into your profile
+3. Restart to load the new bundle:
 
-Add a `link:` dependency + a `bundles` entry to the profile manifest:
+   ```bash
+   dsh check     # iron rule #1: preflight before restart
+   dsh restart   # reloads the web profile; the new bundle loads
+   ```
 
-```jsonc
-// ~/.dsh/profiles/web/package.json
-{
-  "dependencies": {
-    "dsh-plugin-update-checker": "link:/abs/path/to/dsh-plugin-update-checker"
-  },
-  "dsh": { "profile": { "bundles": [ "…", "dsh-plugin-update-checker" ] } }
-}
-```
+4. Open **Settings → Built-in plugins → Check updates → Check updates.**
+   The Check button's `fetch('/api/plugin-update-checker/scan')` runs inside the
+   authenticated browser session, so it needs no manual token.
 
-Then install. **`npm install` rejects the `link:` protocol** in this profile — use `pnpm` (the profile is a pnpm workspace), which is what `dsh` wires under the hood:
+> This repository is **public**, so installing directly from GitHub works without any
+> extra authentication. On networks where `registry.npmjs.org` is unreachable, the
+> launcher uses `registry.npmmirror.com` automatically.
 
-```bash
-cd ~/.dsh/profiles/web
-pnpm install --registry=https://registry.npmmirror.com   # link: deps don't hit the network
-```
+### Option B — local link (for development / editing the plugin)
 
-`dsh`'s `wire_link_plugin_deps` auto-symlinks any `@deepseek-ai/*` the plugin
-imports into its own `node_modules`, but **it does not handle plain npm packages** —
-so pre-link the one real dependency yourself (the documented link-plugin gotcha:
-a `link:` plugin can't resolve packages that aren't hoisted into its tree):
+1. Clone the package where your profile can link it:
 
-```bash
-mkdir -p dsh-plugin-update-checker/node_modules
-ln -sfn ~/.npm/_npx/<active-dsh-hash>/node_modules/semver \
-        dsh-plugin-update-checker/node_modules/semver
-```
+   ```bash
+   # e.g. inside your DSH workspace
+   git clone https://github.com/windrover/dsh-plugin-update-checker dsh-plugin-update-checker
+   ```
 
-### 3. Restart and open it
+2. Link it into your profile. Add a `link:` dependency + a `bundles` entry to the profile manifest:
 
-```bash
-dsh check     # iron rule #1: preflight before restart
-dsh restart   # reloads the web profile; the new bundle loads
-```
+   ```jsonc
+   // ~/.dsh/profiles/web/package.json
+   {
+     "dependencies": {
+       "dsh-plugin-update-checker": "link:/abs/path/to/dsh-plugin-update-checker"
+     },
+     "dsh": { "profile": { "bundles": [ "…", "dsh-plugin-update-checker" ] } }
+   }
+   ```
 
-Open **Settings → Built-in plugins → Check updates → Check updates.**
-The Check button's `fetch('/api/plugin-update-checker/scan')` runs inside the
-authenticated browser session, so it needs no manual token.
+   Then install. **`npm install` rejects the `link:` protocol** in this profile — use `pnpm` (the profile is a pnpm workspace), which is what `dsh` wires under the hood:
+
+   ```bash
+   cd ~/.dsh/profiles/web
+   pnpm install --registry=https://registry.npmmirror.com   # link: deps don't hit the network
+   ```
+
+   `dsh`'s `wire_link_plugin_deps` auto-symlinks any `@deepseek-ai/*` the plugin
+   imports into its own `node_modules`, but **it does not handle plain npm packages** —
+   so pre-link the one real dependency yourself (the documented link-plugin gotcha:
+   a `link:` plugin can't resolve packages that aren't hoisted into its tree):
+
+   ```bash
+   mkdir -p dsh-plugin-update-checker/node_modules
+   ln -sfn ~/.npm/_npx/<active-dsh-hash>/node_modules/semver \
+           dsh-plugin-update-checker/node_modules/semver
+   ```
+
+3. Restart and open it (`dsh check && dsh restart`, then the same Settings path as Option A).
 
 ## 🔌 How it is built
 
