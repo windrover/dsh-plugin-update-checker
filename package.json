@@ -1,0 +1,37 @@
+{
+  "name": "dsh-plugin-update-checker",
+  "version": "0.1.0",
+  "description": "A DeepSeek Harness plugin that adds a \"Check updates\" button to the Plugins settings section: it scans every installed plugin bundle for published updates and evaluates its peer-dependency compatibility against the running DSH runtime.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "lib/host/*.js",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "semver": "^7.6.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-modules"
+      ],
+      "platform": "web"
+    }
+  }
+}
