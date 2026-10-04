@@ -26,37 +26,66 @@
 
 ## 📦 安装
 
-本插件作为普通的 DSH 本地链接包挂载。
+### 方式 A —— 从本 GitHub 仓库直接安装（推荐）
 
-### 1. 把包放到 profile 能链接的位置
+1. 打开右侧栏 **插件（Plugins）** 页面 → **添加插件**。
+2. 在来源框里填入下面任意一种安装描述符（启动器通过 `installBundle` 解析，和 GUI 用的是同一个原语）：
 
-```bash
-# 例如放在你的 DSH 工作区里
-git clone <本仓库> dsh-plugin-update-checker
-```
+   ```text
+   github:windrover/dsh-plugin-update-checker
+   # 或完整 URL：
+   https://github.com/windrover/dsh-plugin-update-checker
+   ```
 
-### 2. 链接进 profile
+3. 重启以加载新 bundle：
 
-使用右侧栏 **插件（Plugins）** 页面（**添加插件** → 绝对本地路径），或在 profile 清单中加入：
+   ```bash
+   dsh check     # 铁律 #1：重启前先预检
+   dsh restart   # 重新加载 web profile，新 bundle 随之加载
+   ```
 
-```jsonc
-// ~/.dsh/profiles/<你的 profile>/package.json
-{
-  "dependencies": {
-    "dsh-plugin-update-checker": "link:/abs/path/to/dsh-plugin-update-checker"
-  }
-}
-```
+4. 打开 **设置 → 内置插件 → 检查更新 → 检查更新。**
+   检查按钮发起的 `fetch('/api/plugin-update-checker/scan')` 在已认证的浏览器会话内执行，无需手动 token。
 
-然后运行 `dsh plugin install`（或重启 harness，让链接安装、浏览器包被服务）。
+> 本仓库是 **公开** 的，所以从 GitHub 直接安装无需额外认证。在 `registry.npmjs.org` 不可达的网络下，启动器会自动改用 `registry.npmmirror.com`。
 
-### 3. 依赖
+### 方式 B —— 本地链接（用于开发 / 改这个插件）
 
-主机半边需要 `semver` 与 `@deepseek-ai/dsh-app-boot`，DSH 安装已自带；只有在 profile 目录树之外开发时才需要手动 `npm install`。
+1. 把包 clone 到 profile 能链接的位置：
 
-### 4. 打开它
+   ```bash
+   # 例如放在你的 DSH 工作区里
+   git clone https://github.com/windrover/dsh-plugin-update-checker dsh-plugin-update-checker
+   ```
 
-**设置 → 内置插件 → 检查更新 → 检查更新。**
+2. 链接进 profile：在 profile 清单中加入 `link:` 依赖与 bundles 条目：
+
+   ```jsonc
+   // ~/.dsh/profiles/<你的 profile>/package.json
+   {
+     "dependencies": {
+       "dsh-plugin-update-checker": "link:/abs/path/to/dsh-plugin-update-checker"
+     },
+     "dsh": { "profile": { "bundles": [ "…", "dsh-plugin-update-checker" ] } }
+   }
+   ```
+
+   然后安装。本 profile 下 **`npm install` 会拒绝 `link:` 协议**——改用 `pnpm`（profile 是 pnpm workspace，这也是 `dsh` 底层用的）：
+
+   ```bash
+   cd ~/.dsh/profiles/web
+   pnpm install --registry=https://registry.npmmirror.com   # link: 依赖不联网
+   ```
+
+   `dsh` 的 `wire_link_plugin_deps` 会自动把插件 import 的 `@deepseek-ai/*` 软链进它自己的 `node_modules`，但**不会处理普通 npm 包**——所以要把那唯一一条真依赖手动预链（link 插件的已知坑：link 插件解析不到没提升到它树里的包）：
+
+   ```bash
+   mkdir -p dsh-plugin-update-checker/node_modules
+   ln -sfn ~/.npm/_npx/<active-dsh-hash>/node_modules/semver \
+           dsh-plugin-update-checker/node_modules/semver
+   ```
+
+3. 重启并打开（`dsh check && dsh restart`，再走方式 A 同样的设置路径）。
 
 ## 🔌 实现方式
 
