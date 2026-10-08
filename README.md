@@ -15,6 +15,8 @@ It lives beside the read-only inventory tab, itself contributing **no configurat
 
 Compatibility and update availability are computed **independently** — a slow or unreachable registry can never hide an incompatible peer range, and a local-only bundle still gets a compatibility verdict.
 
+**Which registry the scan asks**: no longer a hardcoded `registry.npmjs.org`. The host asks the plugin manager for the **configured registry plus its fallbacks** (`pluginManager.registries()`) and then **probes them concurrently, taking the first success**. That matters a lot behind a slow link — measured on one machine, the public registry answered in ~11 s where a mirror answered in ~0.2 s. Racing means a slow registry cannot hold up a fast one even when it is listed first, so the result is never worse than picking either one alone. A bundle that declares `publishConfig.registry` still uses that registry. The winning registry travels with the row and is reused by the one-click update, so **the version is read from, and installed from, the same place**.
+
 ## 📸 Where it sits
 
 Open **Settings → Built-in plugins**. The section now has two tabs:
