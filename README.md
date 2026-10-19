@@ -30,7 +30,19 @@ The check is on demand: click the button, the host scans, and the table fills in
 
 ## 📦 Install
 
-### Option A — from this GitHub repository (recommended)
+### Option A — from npm (recommended)
+
+```bash
+dsh install-plugin dsh-plugin-update-checker
+```
+
+Installing from the registry matters for this plugin in particular: a `github:`
+install is pinned to a commit in the profile lockfile, so re-running the same
+spec never picks up a newer release, and the panel reports it as *Unsupported*
+(it can only compare registry versions). From `0.1.4` on, plain version numbers
+resolve normally and the panel's own **Update** button works.
+
+### Option B — from this GitHub repository
 
 1. Open the sidebar **Plugins** page → **Add plugin**.
 2. In the source field, enter one of these install specs (the launcher resolves them through `installBundle`, the same primitive the GUI uses):
