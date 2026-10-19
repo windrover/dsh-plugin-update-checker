@@ -39,7 +39,10 @@ assert.match(code, /function resolveRegistries/, 'resolveRegistries exists')
 
 const raceBody = code.slice(code.indexOf('function probeAnyRegistry'), code.indexOf('async function probeRegistry'))
 assert.ok(!/await probeRegistry/.test(raceBody), 'probeAnyRegistry must not await registries one by one')
-assert.match(raceBody, /for \(const registry of registries\)/, 'starts every candidate')
+// The shape changed when stale answers started being re-checked: probes are
+// built with map() and settled through promises, but every candidate is still
+// started before any answer is awaited.
+assert.match(raceBody, /registries\.map\(/, 'starts every candidate')
 assert.match(raceBody, /result\.error === undefined/, 'settles on the first success')
 
 // ---- registry resolution: configuration, never a service --------------------
