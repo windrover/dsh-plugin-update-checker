@@ -22,7 +22,10 @@ import { readFileSync } from 'node:fs'
 // The host module imports `semver`, which is a real dependency of the installed
 // package but not necessarily present in a bare clone, so this test reads the
 // source instead of importing it.
-const src = readFileSync(new URL('../lib/host/update-checker.js', import.meta.url), 'utf8')
+// The registry logic moved to host/registry.js when the host half was split by
+// responsibility. Every function asserted below lives in that module, so the
+// slices stay within one file.
+const src = readFileSync(new URL('../lib/host/registry.js', import.meta.url), 'utf8')
 
 // Strip comments first: the file *documents* the ctx.remote bug in prose, and a
 // raw-text scan would flag those explanations as if they were code.
@@ -66,8 +69,11 @@ const routeBody = code.slice(code.indexOf('handler: async (req, res)'))
 assert.ok(!/ctx\.remote/.test(routeBody), 'the scan route must not read ctx.remote')
 
 // ---- scope of the resolution ------------------------------------------------
-const scanCalls = code.match(/resolveRegistries\(/g) ?? []
-assert.equal(scanCalls.length, 2, 'resolveRegistries is defined once and called once per scan')
+// The definition lives in registry.js, the single call site in the entry module.
+const entrySrc = readFileSync(new URL('../lib/host/update-checker.js', import.meta.url), 'utf8')
+const scanCalls = (code.match(/resolveRegistries\(/g) ?? []).length
+  + (entrySrc.match(/resolveRegistries\(/g) ?? []).length
+assert.equal(scanCalls, 2, 'resolveRegistries is defined once and called once per scan')
 
 console.log('ok: registry race contract holds')
 console.log('  - every candidate registry is started before any is awaited')

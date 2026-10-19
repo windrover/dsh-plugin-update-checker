@@ -27,10 +27,17 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
-const src = readFileSync(new URL('../lib/host/update-checker.js', import.meta.url), 'utf8')
-const code = src
-  .replace(/\/\*[\s\S]*?\*\//g, '')
-  .replace(/^[ \t]*\/\/.*$/gm, '')
+// The host half is split by responsibility: isRuntimePackage lives in dsh.js,
+// the runtime feed + checkDshRuntime in runtime.js, scanBundle in scan.js and
+// the route in update-checker.js. Read them all for existence checks, but slice
+// bodies inside the module that owns the function.
+const read = (name) => readFileSync(new URL(`../lib/host/${name}.js`, import.meta.url), 'utf8')
+const strip = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*\/\/.*$/gm, '')
+const dshSrc = strip(read('dsh'))
+const runtimeSrc = strip(read('runtime'))
+const scanSrc = strip(read('scan'))
+const entrySrc = strip(read('update-checker'))
+const code = [dshSrc, runtimeSrc, scanSrc, entrySrc].join('\n')
 
 // ---- 1. The runtime check is its own function the route appends --------------
 assert.match(code, /async function checkDshRuntime/, 'checkDshRuntime exists')
@@ -41,13 +48,13 @@ assert.ok(/name:\s*'dsh-runtime'/.test(code), "the runtime row is named 'dsh-run
 assert.match(code, /function isRuntimePackage/, 'isRuntimePackage exists')
 assert.match(code, /return name === '@deepseek-ai\/dsh'/, 'treats @deepseek-ai/dsh as runtime')
 assert.match(code, /name\.startsWith\('@deepseek-ai\/dsh-'\)/, 'treats @deepseek-ai/dsh-* as runtime')
-const scanBody = code.slice(code.indexOf('async function scanBundle'), code.indexOf('/** Read one manifest'))
+const scanBody = scanSrc.slice(scanSrc.indexOf('async function scanBundle'))
 assert.match(scanBody, /isRuntimePackage\(name\)/, 'scanBundle consults isRuntimePackage')
 assert.match(scanBody, /status:\s*'part-of-runtime'/, 'runtime packages get the part-of-runtime status')
 assert.ok(!/isRuntimePackage[\s\S]*part-of-runtime[\s\S]*resolveSourceLink/.test(scanBody.replace(/resolveSourceLink/g, 'XresolvesX')), 'runtime packages skip resolveSourceLink (no source-link verdict)')
 
 // ---- 3. The runtime check prefers the electron updater feed over npm --------
-const rtBody = code.slice(code.indexOf('async function checkDshRuntime'), code.indexOf('/** Scan one bundle'))
+const rtBody = runtimeSrc.slice(runtimeSrc.indexOf('async function checkDshRuntime'))
 assert.match(rtBody, /readAppUpdateConfig/, 'reads the app-update.yml config')
 assert.match(rtBody, /fetchRuntimeFeedVersion/, 'fetches the updater feed version')
 assert.match(rtBody, /probeAnyRegistry\('@deepseek-ai\/dsh-app-boot'/, 'falls back to npm for the runtime when no feed')

@@ -56,7 +56,9 @@ function resolve(argv, env = {}) {
 // Inlining a copy would let the test drift from the source, so instead we drive
 // the real module through its public entry: the scan route's profile. We assert
 // on argv parsing by exporting a hook; if the hook is absent the test tells you.
-const src = (await import('node:fs')).readFileSync(join(ROOT, 'lib/host/update-checker.js'), 'utf8')
+// The resolver moved to host/profile.js when the host half was split by
+// responsibility; these assertions pin the shipped resolver, so they follow it.
+const src = (await import('node:fs')).readFileSync(join(ROOT, 'lib/host/profile.js'), 'utf8')
 assert.match(src, /function profileDirFromArgv/, 'profileDirFromArgv exists')
 assert.match(src, /profileDirFromArgv\(\)/, 'activeProfileDir consults argv first')
 
