@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-update-checker",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "A DeepSeek Harness plugin that adds a \"Check updates\" button to the Plugins settings section: it scans every installed plugin bundle for published updates and evaluates its peer-dependency compatibility against the running DSH runtime.",
   "keywords": [
     "deepseek",
