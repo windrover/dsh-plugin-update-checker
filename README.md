@@ -4,7 +4,7 @@
 
 A DeepSeek Harness plugin that adds a **Check updates** button to the **Built-in plugins** settings section. Click it and the plugin scans every installed plugin bundle for (1) the latest published version on the npm registry and (2) its compatibility with the running DSH runtime — then shows one row per bundle.
 
-It lives beside the read-only inventory tab, itself contributing **no configuration**: it only reports. Updating or toggling a bundle is still done in the sidebar **Plugins** page or via `dsh plugin`.
+It lives beside the read-only inventory tab and contributes **no configuration** of its own. It reports, and for any bundle with a published update it offers a single **Update** button (the same `installBundle` primitive the GUI's *Add plugin* dialog uses). Enabling, disabling, or removing a bundle is still done in the sidebar **Plugins** page or via `dsh plugin`.
 
 ## ✨ What it does
 
@@ -114,6 +114,6 @@ Pins the browser-half contract (id == package name, one `settings.plugins.tab` r
 
 ## 📝 Limitations
 
-- **Read-only** — it reports; it does not update or toggle anything.
+- **Reports and updates, does not toggle** — it never enables, disables, or removes a bundle, and it cannot change its configuration. A failed update is reported per row, not retried automatically.
 - **Registry reachability** — registry checks need network access to the configured registry; offline or firewalled hosts show *Unknown* per bundle.
 - **Local / git / tarball bundles** — publish no registry version, so their update status is *Unsupported*. Their compatibility is still evaluated from the local manifest.
