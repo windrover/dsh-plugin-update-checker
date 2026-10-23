@@ -4,7 +4,9 @@
 
 A DeepSeek Harness plugin that adds a **Check updates** button to the **Built-in plugins** settings section. Click it and the plugin scans every installed plugin bundle for (1) the latest published version on the npm registry and (2) its compatibility with the running DSH runtime — then shows one row per bundle.
 
-It lives beside the read-only inventory tab and contributes **no configuration** of its own. It reports, and for any bundle with a published update it offers a single **Update** button (the same `installBundle` primitive the GUI's *Add plugin* dialog uses). Enabling, disabling, or removing a bundle is still done in the sidebar **Plugins** page or via `dsh plugin`.
+It lives beside the read-only inventory tab and contributes **no configuration** of its own. It reports, and for any bundle with a published update it offers a single **Update** button. Enabling, disabling, or removing a bundle is still done in the sidebar **Plugins** page or via `dsh plugin`.
+
+**How the Update button works**: the host drives the app's own plugin manager, and an update is two manager calls — `removeBundle`, then `installBundle(<name>@<version>)`. One call is not enough: dsh 0.2.1's manager refuses `add` for a package that is already a profile dependency (`already-installed`, thrown before pnpm runs), which is exactly the shape of an update. The installed version is read back off disk afterwards, so a manager that reports success without writing anything surfaces as a failure instead of a version bump. One bundle is deliberately excluded: this plugin cannot remove itself, because removing it would unload the route serving the request — update it with `dsh install-plugin dsh-plugin-update-checker@<version>` instead.
 
 ## ✨ What it does
 
@@ -113,19 +115,20 @@ resolve normally and the panel's own **Update** button works.
 
 One bundle, two halves:
 
-- **Host** (`lib/index.js` → `lib/host/update-checker.js`) registers `POST /api/plugin-update-checker/scan`, which walks the profile's bundles (via `ctx.remote.pluginManager.listBundles()`, falling back to scanning `node_modules`), reads each manifest, evaluates peer compatibility, and probes the registry. `cordis.patch.yml` adds the Loader row.
-- **Browser** (`lib/client.js`) registers a tab into the `settings.plugins.tab` slot of the Built-in-plugins section and renders the result with `react` (`require("react")`) and the design tokens DSH already exposes. The bundle `id` equals the package `name` — the contract `dsh-client-modules` enforces.
+- **Host** (`lib/index.js` → `lib/host/update-checker.js`) registers two routes. `POST /api/plugin-update-checker/scan` walks the profile's bundles from disk, reads each manifest, evaluates peer compatibility, and probes the registry. `POST /api/plugin-update-checker/update` takes `{ name, version, registry? }` and runs the update through the host's `pluginManager` service (`lib/host/update.js`): attempt `installBundle`, and when the manager answers `already-installed`, `removeBundle` and install again — then read the installed version back. `cordis.patch.yml` adds the Loader row.
+- **Browser** (`lib/client.js`) registers a tab into the `settings.plugins.tab` slot of the Built-in-plugins section and renders the result with `react` (`require("react")`) and the design tokens DSH already exposes. It talks to the host routes only — it no longer reaches `remote.pluginManager` itself. The bundle `id` equals the package `name` — the contract `dsh-client-modules` enforces.
 
 ## 🧪 Test
 
 ```bash
-node test/client-contract.test.mjs
+npm test     # every test below, in order
 ```
 
-Pins the browser-half contract (id == package name, one `settings.plugins.tab` registration, renderable body). The host scan was exercised against the live profile during development and returns `{ ok, dshVersion, checkedAt, plugins: [...] }`.
+`test/client-contract.test.mjs` pins the browser-half contract (id == package name, one `settings.plugins.tab` registration, renderable body). `test/update.test.mjs` pins the update orchestration against a fake manager (remove-then-install, the self-update refusal, which failure stops the sequence). `test/update-route.test.mjs` drives the route end to end on a throwaway profile, including the "manager says applied but the disk did not move" case. `test/layering.test.mjs` keeps the host split one-way and `ctx` confined to the entry module.
 
 ## 📝 Limitations
 
-- **Reports and updates, does not toggle** — it never enables, disables, or removes a bundle, and it cannot change its configuration. A failed update is reported per row, not retried automatically.
+- **Reports and updates, does not toggle** — it never enables, disables, or removes a bundle on its own initiative; the removal in an update is the manager's own two-step for that one bundle. A failed update is reported per row, not retried automatically.
+- **Cannot update itself** — the Update button is replaced by a clear refusal; use `dsh install-plugin dsh-plugin-update-checker@<version>` from a terminal, then restart.
 - **Registry reachability** — registry checks need network access to the configured registry; offline or firewalled hosts show *Unknown* per bundle.
 - **Local / git / tarball bundles** — publish no registry version, so their update status is *Unsupported*. Their compatibility is still evaluated from the local manifest.

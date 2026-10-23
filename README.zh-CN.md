@@ -4,7 +4,9 @@
 
 一个 DeepSeek Harness 插件：在 **内置插件（Built-in plugins）** 设置分区中增加一个 **检查更新（Check updates）** 按钮。点击后，它会扫描每个已安装插件的 (1) npm 上的最新发布版本 与 (2) 与当前运行 DSH 运行时的兼容性，并以每个插件一行的形式展示结果。
 
-它与只读的插件清单页并列，本身**不提供任何配置**。它负责汇报，并对有可用更新的插件提供一个 **更新** 按钮（与 GUI「添加插件」走同一个 `installBundle`）。启用、停用、卸载插件仍然在右侧栏的 **插件（Plugins）** 页面或通过 `dsh plugin` 完成。
+它与只读的插件清单页并列，本身**不提供任何配置**。它负责汇报，并对有可用更新的插件提供一个 **更新** 按钮。启用、停用、卸载插件仍然在右侧栏的 **插件（Plugins）** 页面或通过 `dsh plugin` 完成。
+
+**「更新」按钮怎么工作**：由主机侧驱动 app 自己的插件管理器，一次更新是两次调用——先 `removeBundle`，再 `installBundle(<name>@<version>)`。单次调用不够：dsh 0.2.1 的管理器对「已经是 profile 依赖」的包直接拒绝 `add`（`already-installed`，在 pnpm 启动前抛出），而更新恰好就是这个形状。装完后会从磁盘读回实际版本，所以「管理器报告成功但什么都没写」会如实报成失败，而不是假的版本变更。有一个包例外：本插件不能卸载自己——卸载会把正在响应这次请求的路由一起卸掉，请用 `dsh install-plugin dsh-plugin-update-checker@<version>` 更新。
 
 ## ✨ 它做什么
 
@@ -105,19 +107,20 @@ commit 上，重跑同样的 spec 不会拿到新版本，面板也只能把它�
 
 一个包，两端：
 
-- **主机（Host）**（`lib/index.js` → `lib/host/update-checker.js`）注册 `POST /api/plugin-update-checker/scan`，遍历 profile 的 bundles（通过 `ctx.remote.pluginManager.listBundles()`，回退到扫描 `node_modules`），读取每个清单、评估 peer 兼容性、探测注册表。`cordis.patch.yml` 添加 Loader 行。
-- **浏览器（Browser）**（`lib/client.js`）向内置插件分区的 `settings.plugins.tab` 槽注册一个标签页，并用 `react`（`require("react")`）和 DSH 已暴露的设计 token 渲染结果。包的 `id` 等于包 `name`——这是 `dsh-client-modules` 强制的契约。
+- **主机（Host）**（`lib/index.js` → `lib/host/update-checker.js`）注册两条路由。`POST /api/plugin-update-checker/scan` 从磁盘遍历 profile 的 bundles，读取每个清单、评估 peer 兼容性、探测注册表。`POST /api/plugin-update-checker/update` 接收 `{ name, version, registry? }`，通过宿主 `pluginManager` 服务执行更新（`lib/host/update.js`）：先试 `installBundle`，管理器回答 `already-installed` 就 `removeBundle` 后再装一次，最后读回落盘版本。`cordis.patch.yml` 添加 Loader 行。
+- **浏览器（Browser）**（`lib/client.js`）向内置插件分区的 `settings.plugins.tab` 槽注册一个标签页，并用 `react`（`require("react")`）和 DSH 已暴露的设计 token 渲染结果。它只与主机的两条路由通信，自己不再碰 `remote.pluginManager`。包的 `id` 等于包 `name`——这是 `dsh-client-modules` 强制的契约。
 
 ## 🧪 测试
 
 ```bash
-node test/client-contract.test.mjs
+npm test     # 下面全部按顺序跑
 ```
 
-锁定浏览器半边的契约（id == 包名、唯一一个 `settings.plugins.tab` 注册、可渲染的 body 组件）。主机扫描已在开发期对真实 profile 演练过，返回 `{ ok, dshVersion, checkedAt, plugins: [...] }`。
+`test/client-contract.test.mjs` 锁定浏览器半边的契约（id == 包名、唯一一个 `settings.plugins.tab` 注册、可渲染的 body 组件）。`test/update.test.mjs` 用假管理器锁定更新编排（先卸后装、拒绝自更新、哪种失败会中断流程）。`test/update-route.test.mjs` 在一次性 profile 上端到端跑路由，包括「管理器说 applied、磁盘却没动」这一种。`test/layering.test.mjs` 保证主机拆分保持单向依赖、`ctx` 只出现在入口模块。
 
 ## 📝 局限
 
-- **只汇报与更新，不启停** —— 不会启用/停用/卸载插件，也不能改配置；更新失败按行回报，不自动重试。
+- **只汇报与更新，不启停** —— 不会主动启用/停用/卸载插件；更新里的那次卸载是管理器对这一个包的两步操作。更新失败按行回报，不自动重试。
+- **不能更新自己** —— 「更新」按钮会给出明确拒绝；请在终端执行 `dsh install-plugin dsh-plugin-update-checker@<version>` 后重启。
 - **注册表可达性** —— 注册表检查需要能访问所配置注册表的网络；离线或防火墙后的主机每个包显示 *未知（Unknown）*。
 - **本地 / git / tarball 包** —— 不发布注册表版本，其更新状态为 *不受支持*；兼容性仍由本地清单评估。

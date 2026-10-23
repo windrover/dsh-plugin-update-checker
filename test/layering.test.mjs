@@ -2,7 +2,7 @@
 /**
  * Layering guard for the split host half.
  *
- * The host half was one 908-line file; it is now six modules by responsibility.
+ * The host half was one 908-line file; it is now seven modules by responsibility.
  * A split is only worth keeping if the boundaries stay put, so the rules that
  * made the split worthwhile are asserted here instead of written in a doc:
  *
@@ -36,7 +36,8 @@ const ALLOWED = {
   'registry.js': [],
   'runtime.js': ['registry.js'],
   'scan.js': ['dsh.js', 'profile.js', 'registry.js'],
-  'update-checker.js': ['dsh.js', 'profile.js', 'registry.js', 'runtime.js', 'scan.js'],
+  'update.js': [],
+  'update-checker.js': ['dsh.js', 'profile.js', 'registry.js', 'runtime.js', 'scan.js', 'update.js'],
 }
 for (const file of files) {
   const imports = [...sources[file].matchAll(/from '\.\/([a-z-]+\.js)'/g)].map((m) => m[1])
