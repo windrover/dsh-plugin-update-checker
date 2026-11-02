@@ -80,14 +80,14 @@ apply(ctx, {})
 const route = routes.find((r) => String(r.path).includes('scan'))
 assert.ok(route, 'scan route must be registered')
 
-const call = async (method) => {
+const call = async (method, url) => {
   const res = {
     statusCode: 200, headers: {},
     setHeader(k, v) { this.headers[k.toLowerCase()] = v },
     end(body) { this.body = body },
     writableEnded: false,
   }
-  await route.handler({ method, socket: { remoteAddress: '127.0.0.1' }, headers: {} }, res)
+  await route.handler({ method, url, socket: { remoteAddress: '127.0.0.1' }, headers: {} }, res)
   return { status: res.statusCode, body: JSON.parse(res.body) }
 }
 
@@ -102,6 +102,7 @@ try {
   assert.equal(status, 200, 'POST must answer 200')
   assert.equal(body.ok, true)
   assert.equal(body.dshVersion, RUNTIME, 'dshVersion must come from the resolved runtime')
+  assert.equal(body.dshVersionSource, 'host', 'nothing was relayed, so the host resolved it')
 
   const byName = Object.fromEntries((body.plugins ?? []).map((p) => [p.name, p]))
   assert.ok(byName['ok-bundle'], 'ok-bundle must be scanned')
@@ -118,6 +119,23 @@ try {
   assert.equal(byName['engines-bad'].compatibility.status, 'incompatible',
     'an engines.dsh mismatch must surface as incompatible')
   assert.deepEqual(byName['engines-bad'].compatibility.peers, { 'engines.dsh': '^0.3.0-0' })
+
+  // A relayed boot release wins for that one request. Inside the desktop app the
+  // host's own module lookups find the npm CLI (rc.2) rather than the runtime
+  // packed in app.asar, so the page's boot graph is the only exact source.
+  const relayed = await call('POST', '/api/plugin-update-checker/scan?runtime=0.2.1-rc.5')
+  assert.equal(relayed.status, 200)
+  assert.equal(relayed.body.dshVersion, '0.2.1-rc.5', 'the relayed release must win')
+  assert.equal(relayed.body.dshVersionSource, 'client')
+  const relayedRows = Object.fromEntries(relayed.body.plugins.map((p) => [p.name, p]))
+  assert.equal(relayedRows['dsh-runtime'].installedVersion, '0.2.1-rc.5', 'the runtime row follows the relayed version')
+  assert.equal(relayedRows['ok-bundle'].compatibility.status, 'compatible', '>=0.2.0-0 still matches rc.5')
+  assert.equal(relayedRows['engines-bad'].compatibility.status, 'incompatible', '^0.3.0-0 still excludes rc.5')
+
+  // Anything unusable is ignored rather than becoming a reported version.
+  const bogus = await call('POST', '/api/plugin-update-checker/scan?runtime=not-a-version')
+  assert.equal(bogus.body.dshVersion, RUNTIME, 'an invalid runtime param must not be trusted')
+  assert.equal(bogus.body.dshVersionSource, 'host')
 
   assert.ok(fetched.length > 0, 'the scan must probe the configured registry')
   assert.ok(fetched.every((u) => u.startsWith(REGISTRY)), `no request may leave the stubbed registry: ${fetched.join(', ')}`)

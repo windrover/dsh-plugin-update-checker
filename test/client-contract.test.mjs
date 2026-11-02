@@ -98,18 +98,26 @@ const mockCtx = {
   modules: { entries: {} },
 }
 // The bundle exposes apply on the module exports returned by the factory.
-// Re-run the factory capture to obtain exports.
+// Re-run the factory capture to obtain exports, this time with the boot graph a
+// real Host injects so the scan URL can be checked.
 let capturedExports
+const scanned = []
+const bootSandbox = {
+  window: {
+    __ModuleLoader__: {
+      load: ({ factory }) => { capturedExports = factory(requireStub) },
+    },
+    __DSH_BOOT__: { release: { version: '0.2.1-rc.5', commit: 'd4db512' } },
+  },
+  fetch: async (url, init) => {
+    scanned.push({ url, init })
+    return { json: async () => ({ ok: true, dshVersion: '0.2.1-rc.5' }) }
+  },
+  console,
+}
 vm.runInNewContext(
   readFileSync(join(ROOT, 'lib/client.js'), 'utf8'),
-  {
-    window: {
-      __ModuleLoader__: {
-        load: ({ factory }) => { capturedExports = factory(requireStub) },
-      },
-    },
-    console,
-  },
+  bootSandbox,
   { filename: join(ROOT, 'lib/client.js') }
 )
 
@@ -130,8 +138,127 @@ const t = (key, params) => (params ? `${key}:${JSON.stringify(params)}` : key)
 const rendered = TabBody({ t, scan: async () => ({}) })
 assert.ok(rendered && rendered.type === 'div', 'body renders a root <div>')
 
+// ---- the scan relays the release the Host put in the boot graph ------------
+// Inside the desktop app the host half's own module lookups find the npm CLI
+// (0.2.1-rc.2) instead of the runtime packed in app.asar; the boot graph is the
+// one place that names the release actually serving the page, so the scan sends
+// it and the host prefers it for that request.
+const { scan } = slotEntries[0].inject()
+await scan()
+assert.equal(scanned.length, 1, 'scan calls the host route once')
+assert.equal(scanned[0].init?.method, 'POST', 'scan is a POST')
+assert.equal(scanned[0].url, '/api/plugin-update-checker/scan?runtime=0.2.1-rc.5',
+  'the boot release travels to the host')
+
+// Older Hosts inject no release: the plain route, host-side resolution decides.
+bootSandbox.window.__DSH_BOOT__ = { release: {} }
+await scan()
+assert.equal(scanned[1].url, '/api/plugin-update-checker/scan',
+  'a graph without a release keeps the plain route')
+
+bootSandbox.window.__DSH_BOOT__ = undefined
+await scan()
+assert.equal(scanned[2].url, '/api/plugin-update-checker/scan',
+  'no boot graph at all keeps the plain route')
+
+// ---- how an unactionable update is labelled --------------------------------
+// The runtime row is the one thing this panel can never update: the desktop app
+// delivers it. A plain "Update available" next to a row with no button reads as
+// a broken control, so that row names the actor — and only when the host really
+// is the desktop carrier (update.source === 'desktop-updater'). A CLI/web host
+// falls back to npm, keeps "Update available", and gets npm instructions.
+
+function renderTab(result) {
+  const states = [false, null, result, {}, {}] // loading, error, result, updating, outcome
+  const reactWithStates = { ...react, useState: () => [states.shift(), () => {}] }
+  let bundleExports
+  vm.runInNewContext(
+    readFileSync(join(ROOT, 'lib/client.js'), 'utf8'),
+    {
+      window: {
+        __ModuleLoader__: {
+          load: ({ factory }) => {
+            bundleExports = factory((spec) => {
+              if (spec === 'react') return reactWithStates
+              if (spec === 'react/jsx-runtime') return react_jsx_runtime
+              throw new Error(`unexpected require(${JSON.stringify(spec)})`)
+            })
+          },
+        },
+      },
+      console,
+    },
+    { filename: join(ROOT, 'lib/client.js') }
+  )
+  const bodies = []
+  bundleExports.apply({
+    effect: (fn) => fn(),
+    slots: {
+      register: (reg, body) => { bodies.push(body); return () => {} },
+      inject: (name, factory) => factory(),
+    },
+    locale: { register() {}, bind: () => (key, params) => (params ? `${key}:${JSON.stringify(params)}` : key) },
+    modules: { entries: {} },
+  })
+  return bodies[0]
+}
+
+function textsOf(node, out = []) {
+  if (node === null || node === undefined || node === false) return out
+  if (typeof node === 'string' || typeof node === 'number') { out.push(String(node)); return out }
+  if (Array.isArray(node)) { for (const n of node) textsOf(n, out); return out }
+  if (typeof node === 'object') {
+    textsOf(node.children, out)
+    if (node.props && node.props.children !== undefined) textsOf(node.props.children, out)
+  }
+  return out
+}
+
+const resultWith = (plugins) => ({
+  ok: true,
+  checkedAt: '2026-10-30T00:00:00.000Z',
+  dshVersion: '0.2.1-rc.2',
+  plugins,
+})
+const runtimeRow = (source) => ({
+  name: 'dsh-runtime',
+  installedVersion: '0.2.1-rc.2',
+  installed: true,
+  linked: false,
+  compatibility: { status: 'compatible' },
+  update: { status: 'update-available', latest: '0.2.1-rc.5', ...(source ? { source } : {}) },
+})
+
+const scanStub = async () => ({})
+const desktopTexts = textsOf(renderTab(resultWith([runtimeRow('desktop-updater')]))({ t, scan: scanStub }))
+assert.ok(desktopTexts.includes('update.appManaged'),
+  'the desktop runtime row names the app as the updater')
+assert.ok(!desktopTexts.includes('update.updateAvailable'),
+  'the desktop runtime row must not claim a generic update')
+assert.ok(desktopTexts.includes('runtimeUpdateAvailable'), 'availability is still stated')
+assert.ok(desktopTexts.includes('runtimeUpdateHint'), 'the desktop hint stays')
+assert.ok(!desktopTexts.includes('updateBtn'), 'the runtime never gets an update button')
+
+const cliTexts = textsOf(renderTab(resultWith([runtimeRow()]))({ t, scan: scanStub }))
+assert.ok(cliTexts.includes('update.updateAvailable'), 'a CLI-hosted runtime keeps the normal wording')
+assert.ok(!cliTexts.includes('update.appManaged'), 'no app claim without the desktop feed')
+assert.ok(cliTexts.some((s) => s.startsWith('runtimeUpdateHintNpm:')), 'npm hosts get npm instructions')
+assert.ok(!cliTexts.includes('runtimeUpdateHint'), 'the app-updater hint must not leak into npm hosts')
+assert.ok(!cliTexts.includes('updateBtn'), 'the runtime never gets an update button')
+
+// Ordinary plugins are untouched: they keep their Update button.
+const pluginTexts = textsOf(renderTab(resultWith([{
+  name: 'some-plugin',
+  installedVersion: '1.0.0',
+  compatibility: { status: 'compatible' },
+  update: { status: 'update-available', latest: '1.1.0' },
+}]))({ t, scan: scanStub }))
+assert.ok(pluginTexts.includes('updateBtn'), 'a normal plugin still offers Update')
+assert.ok(!pluginTexts.includes('update.appManaged'), 'the quiet badge is runtime-only')
+
 console.log('ok: dsh-plugin-update-checker browser-half contract holds')
 console.log(`  bundle id      : ${loadCalls[0]}`)
 console.log(`  tab id         : ${slotEntries[0].id} (order ${slotEntries[0].order})`)
 console.log(`  tab label      : ${slotEntries[0].label(t)}`)
 console.log(`  inject         : ${JSON.stringify(capturedExports.inject)}`)
+console.log('  runtime labels : app-managed on desktop, npm hint elsewhere, never a button')

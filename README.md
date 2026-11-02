@@ -130,5 +130,6 @@ npm test     # every test below, in order
 
 - **Reports and updates, does not toggle** — it never enables, disables, or removes a bundle on its own initiative; the removal in an update is the manager's own two-step for that one bundle. A failed update is reported per row, not retried automatically.
 - **Cannot update itself** — the Update button is replaced by a clear refusal; use `dsh install-plugin dsh-plugin-update-checker@<version>` from a terminal, then restart.
+- **Reports the runtime, never updates it** — the DSH runtime row has no Update button in any carrier. On the desktop it reads **Updated by the app** and points at the menu bar; on a CLI/web host it keeps *Update available* and shows the `npm install -g @deepseek-ai/dsh@<version>` command. Naming the actor is deliberate: a button this panel cannot honour reads as a broken control.
 - **Registry reachability** — registry checks need network access to the configured registry; offline or firewalled hosts show *Unknown* per bundle.
 - **Local / git / tarball bundles** — publish no registry version, so their update status is *Unsupported*. Their compatibility is still evaluated from the local manifest.
