@@ -246,6 +246,36 @@ assert.ok(cliTexts.some((s) => s.startsWith('runtimeUpdateHintNpm:')), 'npm host
 assert.ok(!cliTexts.includes('runtimeUpdateHint'), 'the app-updater hint must not leak into npm hosts')
 assert.ok(!cliTexts.includes('updateBtn'), 'the runtime never gets an update button')
 
+// A release the app's own updater withholds (outside the staged-rollout window)
+// must not be advertised, but it must not become invisible either: the row says
+// "up to date" and names the release the feed is holding back. Otherwise the
+// panel has the same silent blind spot it was built to close.
+const stagedRow = {
+  name: 'dsh-runtime',
+  installedVersion: '0.2.2-rc.5',
+  installed: true,
+  linked: false,
+  compatibility: { status: 'compatible' },
+  update: { status: 'up-to-date', latest: '0.2.2-rc.5', staged: '0.2.3-alpha.2' },
+}
+const stagedTexts = textsOf(renderTab(resultWith([stagedRow]))({ t, scan: scanStub }))
+assert.ok(stagedTexts.includes('update.upToDate'), 'a gated release reads as up to date')
+assert.ok(!stagedTexts.includes('update.updateAvailable'), 'a gated release is not advertised as available')
+assert.ok(!stagedTexts.includes('runtimeUpdateAvailable'), 'no availability line for a gated release')
+assert.ok(stagedTexts.some((s) => s.startsWith('runtimeStaged:')), 'the withheld release is explained')
+assert.ok(!stagedTexts.includes('updateBtn'), 'the runtime never gets an update button')
+
+// A plain up-to-date runtime (nothing withheld) stays quiet about staging.
+const quietTexts = textsOf(renderTab(resultWith([{
+  name: 'dsh-runtime',
+  installedVersion: '0.2.2-rc.5',
+  installed: true,
+  linked: false,
+  compatibility: { status: 'compatible' },
+  update: { status: 'up-to-date', latest: '0.2.2-rc.5' },
+}]))({ t, scan: scanStub }))
+assert.ok(!quietTexts.some((s) => s.startsWith('runtimeStaged:')), 'no staging note when nothing is withheld')
+
 // Ordinary plugins are untouched: they keep their Update button.
 const pluginTexts = textsOf(renderTab(resultWith([{
   name: 'some-plugin',

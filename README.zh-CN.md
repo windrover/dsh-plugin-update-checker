@@ -116,12 +116,13 @@ commit 上，重跑同样的 spec 不会拿到新版本，面板也只能把它�
 npm test     # 下面全部按顺序跑
 ```
 
-`test/client-contract.test.mjs` 锁定浏览器半边的契约（id == 包名、唯一一个 `settings.plugins.tab` 注册、可渲染的 body 组件）。`test/update.test.mjs` 用假管理器锁定更新编排（先卸后装、拒绝自更新、哪种失败会中断流程）。`test/update-route.test.mjs` 在一次性 profile 上端到端跑路由，包括「管理器说 applied、磁盘却没动」这一种。`test/layering.test.mjs` 保证主机拆分保持单向依赖、`ctx` 只出现在入口模块。
+`test/client-contract.test.mjs` 锁定浏览器半边的契约（id == 包名、唯一一个 `settings.plugins.tab` 注册、可渲染的 body 组件）。`test/update.test.mjs` 用假管理器锁定更新编排（先卸后装、拒绝自更新、哪种失败会中断流程）。`test/update-route.test.mjs` 在一次性 profile 上端到端跑路由，包括「管理器说 applied、磁盘却没动」这一种。`test/layering.test.mjs` 保证主机拆分保持单向依赖、`ctx` 只出现在入口模块。`test/runtime-staging.test.mjs` 用假 feed 和假 `.updaterId` 锁定灰度门槛，被挡下与放行（无门槛 / 读不到身份）两条分支都覆盖。
 
 ## 📝 局限
 
 - **只汇报与更新，不启停** —— 不会主动启用/停用/卸载插件；更新里的那次卸载是管理器对这一个包的两步操作。更新失败按行回报，不自动重试。
 - **不能更新自己** —— 「更新」按钮会给出明确拒绝；请在终端执行 `dsh install-plugin dsh-plugin-update-checker@<version>` 后重启。
 - **只报告运行时，从不更新它** —— DSH 运行时那一行在任何载体下都没有「更新」按钮。桌面 App 里显示 **由 App 更新** 并指向菜单栏；CLI / web 宿主保留 *有更新*，并给出 `npm install -g @deepseek-ai/dsh@<version>` 命令。刻意写明「谁来更新」：一个本面板无法兑现的按钮，看起来就是个坏掉的控件。
+- **和 App 自带更新器用同一个灰度门槛** —— 桌面 feed 里的 `stagingPercentage` 是真实闸门：electron-updater 用 `<userData>/.updaterId` 的字节 12–15 算出本机桶位，桶位落在窗口外就不给这版。面板同样计算，所以灰度没轮到的版本显示 *已是最新*，并在下方注明「{version} 正在灰度发布，本次安装还没轮到，菜单里也查不到」。缺门槛、门槛写坏、读不到 updaterId 时一律按「有更新」处理（保留修复前的行为），不会因读不到内部状态而漏报。
 - **注册表可达性** —— 注册表检查需要能访问所配置注册表的网络；离线或防火墙后的主机每个包显示 *未知（Unknown）*。
 - **本地 / git / tarball 包** —— 不发布注册表版本，其更新状态为 *不受支持*；兼容性仍由本地清单评估。

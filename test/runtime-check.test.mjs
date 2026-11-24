@@ -63,6 +63,14 @@ const feedIdx = rtBody.indexOf('fetchRuntimeFeedVersion')
 const npmIdx = rtBody.indexOf("probeAnyRegistry('@deepseek-ai/dsh-app-boot'")
 assert.ok(feedIdx !== -1 && npmIdx !== -1 && feedIdx < npmIdx, 'the updater feed is checked before npm')
 
+// The feed's stagingPercentage is a real gate in electron-updater: a version
+// outside this install's rollout window is not an update the app will install.
+// The panel must apply the same gate, or it advertises a release the menu bar
+// refuses to offer (see test/runtime-staging.test.mjs for the behaviour).
+assert.match(runtimeSrc, /function withinStagingRollout/, 'the rollout gate exists')
+assert.match(rtBody, /withinStagingRollout\(feed\.stagingPercentage\)/, 'the runtime check applies the feed gate')
+assert.match(runtimeSrc, /stagingPercentage/, 'the feed parser reads stagingPercentage, not just version')
+
 // ---- 4. The feed file selection matches electron-builder's channel naming ---
 assert.match(code, /function runtimeFeedFileNames/, 'runtimeFeedFileNames exists')
 assert.match(code, /channel === 'latest' \? 'latest' : channel/, 'uses the channel in the file name (nightly -> nightly-mac.yml)')
